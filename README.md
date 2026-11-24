@@ -74,6 +74,17 @@
 - 不能穿墙、不能越界
 - 不要求最短，BFS/DFS/A* 都行
 
+完整契约（启动方式、状态判定、计时口径、常见错误）见 **[PROTOCOL.md](PROTOCOL.md)**。
+
+### 已有脚本格式不一样？
+
+不用重写算法，`adapters/` 里有两个纯 Python 转换模板：
+
+- `turns_to_path.py`：把 `UDLR` / `up down left right` 移动序列转成坐标
+- `json_to_path.py`：把 `{"path": [[x,y],...]}`、`[[x,y],...]`、扁平数组等转成坐标
+
+用法和可直接复制的命令模板见 [adapters/README.md](adapters/README.md)。
+
 ## 支持的语言（自动识别）
 
 | 扩展名 | 语言 | 默认命令（可改） |
