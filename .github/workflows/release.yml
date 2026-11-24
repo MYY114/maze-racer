@@ -1,0 +1,75 @@
+name: Build & Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "发布版本号，例如 v1.0.0"
+        required: true
+        default: "v1.0.0"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.inputs.version }}"
+          if ([string]::IsNullOrWhiteSpace($v)) { $v = "${{ github.ref_name }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Release version: $v"
+
+      - name: Publish slim build (needs .NET 9 runtime)
+        run: dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o dist-slim
+
+      - name: Publish portable build (bundled runtime)
+        run: dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o dist-portable
+
+      - name: Rename artifacts
+        shell: pwsh
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          Copy-Item "dist-slim/MazeRacer.exe" "MazeRacer-$v-windows-x64-slim.exe"
+          Copy-Item "dist-portable/MazeRacer.exe" "MazeRacer-$v-windows-x64-portable.exe"
+          Compress-Archive -Path samples, README.md -DestinationPath "MazeRacer-$v-samples.zip" -Force
+          Get-ChildItem *.exe, *.zip | Format-Table Name, Length
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.version }}
+          name: ${{ steps.ver.outputs.version }}
+          fail_on_unmatched_files: true
+          body: |
+            多语言脚本解迷宫测速台：生成迷宫 → 多脚本同时跑 → 校验路径 → 按耗时排名。
+
+            **两个 exe，功能完全一样：**
+
+            | 文件 | 说明 |
+            | --- | --- |
+            | `MazeRacer-*-windows-x64-portable.exe` | 便携版，自带 .NET 运行时，约 54 MB，复制到任意 64 位 Windows 10/11 直接双击运行 |
+            | `MazeRacer-*-windows-x64-slim.exe` | 精简版，约 24 MB，需要本机安装 .NET 9 桌面运行时（x64） |
+
+            **`MazeRacer-*-samples.zip`**：示例脚本（Python / Node / PowerShell / C++ / 错误答案 / 慢脚本）+ 使用说明。解压后把 `samples/` 放到 exe 同目录，点「载入示例脚本」即可开跑。
+
+            脚本协议：读 `{input}` 迷宫文本，把路径按 `x y` 每行一格写进 `{output}`，从 S 走到 E、不穿墙即可。
+          files: |
+            MazeRacer-${{ steps.ver.outputs.version }}-windows-x64-portable.exe
+            MazeRacer-${{ steps.ver.outputs.version }}-windows-x64-slim.exe
+            MazeRacer-${{ steps.ver.outputs.version }}-samples.zip
